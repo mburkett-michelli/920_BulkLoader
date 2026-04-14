@@ -1,0 +1,239 @@
+-------------------------------------------------
+-- Used with iRev Configuration File
+-- F:\Baseline_Software\920i\Bulk_Loader\Bulk Loader.920
+-------------------------------------------------
+
+
+-- Scale Aliases
+
+-- Setpoint Aliases
+SP1      : constant integer := 1;
+SP2      : constant integer := 2;
+SP3      : constant integer := 3;
+SP4      : constant integer := 4;
+SP7      : constant integer := 5;
+SP14     : constant integer := 11;
+SP11     : constant integer := 12;
+SP12     : constant integer := 13;
+SP18     : constant integer := 14;
+SP17     : constant integer := 15;
+SP15     : constant integer := 16;
+SP16     : constant integer := 17;
+
+-- Widget Aliases
+Lbl1S1   : constant integer := 2;
+Lbl2S1   : constant integer := 3;
+Lbl3S1   : constant integer := 4;
+Lbl4S1   : constant integer := 5;
+Lbl5S1   : constant integer := 6;
+Lbl6S1   : constant integer := 7;
+Lbl7S1   : constant integer := 8;
+Lbl10S1  : constant integer := 9;
+Lbl14S1  : constant integer := 10;
+Lbl15S1  : constant integer := 11;
+Lbl16S1  : constant integer := 12;
+Lbl1S9   : constant integer := 13;
+Lbl2S9   : constant integer := 14;
+Lbl3S9   : constant integer := 15;
+Lbl4S9   : constant integer := 16;
+Lbl1S2   : constant integer := 17;
+Lbl2S2   : constant integer := 18;
+Lbl3S2   : constant integer := 19;
+Lbl4S2   : constant integer := 20;
+Lbl5S2   : constant integer := 21;
+Lbl6S2   : constant integer := 22;
+Lbl7S2   : constant integer := 23;
+Lbl8S2   : constant integer := 24;
+Lbl9S2   : constant integer := 25;
+Lbl10S2  : constant integer := 26;
+Lbl11S2  : constant integer := 27;
+Lbl12S2  : constant integer := 28;
+Lbl13S2  : constant integer := 29;
+Lbl14S2  : constant integer := 30;
+Lbl15S2  : constant integer := 31;
+Lbl16S2  : constant integer := 32;
+Lbl17S2  : constant integer := 33;
+Lbl18S2  : constant integer := 34;
+Lbl19S2  : constant integer := 35;
+Lbl20S2  : constant integer := 36;
+Lbl21S2  : constant integer := 37;
+Lbl22S2  : constant integer := 38;
+Lbl23S2  : constant integer := 39;
+Lbl24S2  : constant integer := 40;
+Lbl25S2  : constant integer := 41;
+Lbl26S2  : constant integer := 42;
+Lbl27S2  : constant integer := 43;
+Lbl28S2  : constant integer := 44;
+Lbl29S2  : constant integer := 45;
+Lbl30S2  : constant integer := 46;
+Lbl31S2  : constant integer := 47;
+Lbl17S1  : constant integer := 48;
+Lbl18S1  : constant integer := 49;
+Lbl19S1  : constant integer := 50;
+Lbl20S1  : constant integer := 51;
+Lbl21S1  : constant integer := 52;
+Lbl22S1  : constant integer := 53;
+Lbl23S1  : constant integer := 54;
+Bar1S1   : constant integer := 55;
+Bar2S1   : constant integer := 56;
+Lbl5S9   : constant integer := 57;
+Lbl1S3   : constant integer := 58;
+Lbl2S3   : constant integer := 59;
+Lbl3S3   : constant integer := 60;
+Lbl4S3   : constant integer := 61;
+Lbl5S3   : constant integer := 62;
+Lbl6S3   : constant integer := 63;
+Lbl7S3   : constant integer := 64;
+Lbl8S3   : constant integer := 65;
+Lbl9S3   : constant integer := 66;
+Lbl10S3  : constant integer := 67;
+Lbl11S3  : constant integer := 68;
+Lbl12S3  : constant integer := 69;
+tCutOff  : constant integer := 70;
+CutOff   : constant integer := 71;
+Lbl13S3  : constant integer := 72;
+Lbl14S3  : constant integer := 73;
+Lbl15S3  : constant integer := 74;
+Lbl16S3  : constant integer := 75;
+Lbl17S3  : constant integer := 76;
+Lbl18S3  : constant integer := 77;
+Lbl19S3  : constant integer := 78;
+Lbl20S3  : constant integer := 79;
+Lbl21S3  : constant integer := 80;
+Lbl22S3  : constant integer := 81;
+Lbl23S3  : constant integer := 82;
+Sym1S1   : constant integer := 83;
+Sym2S1   : constant integer := 84;
+Sym3S1   : constant integer := 85;
+
+-- Serial Port Aliases
+Port1    : constant integer := 1;
+Port2    : constant integer := 2;
+Port3    : constant integer := 3;
+Port4    : constant integer := 4;
+
+-- Analog Output Card Aliases
+
+-- Digital I/O Aliases
+DIOCRD0  : constant integer := 0;
+DIO0_5   : constant integer := 5;
+DIO0_6   : constant integer := 6;
+DIO0_7   : constant integer := 7;
+DIO0_8   : constant integer := 8;
+DIO0_9   : constant integer := 9;
+DIO0_10  : constant integer := 10;
+DIO0_11  : constant integer := 11;
+DIO0_12  : constant integer := 12;
+DIO0_13  : constant integer := 13;
+DIO0_14  : constant integer := 14;
+DIO0_15  : constant integer := 15;
+DIO0_16  : constant integer := 16;
+DIO0_17  : constant integer := 17;
+DIO0_18  : constant integer := 18;
+DIO0_19  : constant integer := 19;
+DIO0_20  : constant integer := 20;
+DIO0_21  : constant integer := 21;
+DIO0_22  : constant integer := 22;
+DIO0_23  : constant integer := 23;
+DIO0_24  : constant integer := 24;
+
+DIOCRD2  : constant integer := 2;
+Stop_A   : constant integer := 1;
+Fill     : constant integer := 2;
+Dump     : constant integer := 3;
+Dump_O   : constant integer := 4;
+Fill_O   : constant integer := 5;
+
+-- Database Type Definitions and Field Aliases
+type TruckDatabase is Database ("Truck")
+	ID       : string;
+	Pri_Wgt  : real;
+	Sec_Wgt  : real;
+	Ter_Wgt  : real;
+	TimeDate : datetime;
+	Scale    : integer;
+	Keyed    : integer;
+end database;
+
+Truck_ID          : constant integer := 1;
+Truck_Pri_Wgt     : constant integer := 2;
+Truck_Sec_Wgt     : constant integer := 3;
+Truck_Ter_Wgt     : constant integer := 4;
+Truck_TimeDate    : constant integer := 5;
+Truck_Scale       : constant integer := 6;
+Truck_Keyed       : constant integer := 7;
+
+type ConfigDatabase is Database ("Config")
+	Draft    : real;
+	Header1  : string;
+	Header2  : string;
+	DrMin    : real;
+	DrMax    : real;
+	Settle   : integer;
+	Empty    : real;
+	PreAct   : real;
+end database;
+
+Config_Draft      : constant integer := 1;
+Config_Header1    : constant integer := 2;
+Config_Header2    : constant integer := 3;
+Config_DrMin      : constant integer := 4;
+Config_DrMax      : constant integer := 5;
+Config_Settle     : constant integer := 6;
+Config_Empty      : constant integer := 7;
+Config_PreAct     : constant integer := 8;
+
+type StatusDatabase is Database ("Status")
+	Trans    : integer;
+	LastFill : datetime;
+	Job      : integer;
+end database;
+
+Status_Trans      : constant integer := 1;
+Status_LastFill   : constant integer := 2;
+Status_Job        : constant integer := 3;
+
+type JobsDatabase is Database ("Jobs")
+	Job      : integer;
+	CarNum   : string;
+	Comodity : string;
+	Target   : real;
+	Draft    : real;
+end database;
+
+Jobs_Job          : constant integer := 1;
+Jobs_CarNum       : constant integer := 2;
+Jobs_Comodity     : constant integer := 3;
+Jobs_Target       : constant integer := 4;
+Jobs_Draft        : constant integer := 5;
+
+type ComodityDatabase is Database ("Comodity")
+	Name     : string;
+	PreAct   : real;
+end database;
+
+Comodity_Name     : constant integer := 1;
+Comodity_PreAct   : constant integer := 2;
+
+type TransDatabase is Database ("Trans")
+	Tran     : integer;
+	Job      : integer;
+	DProcess : datetime;
+	CarNum   : string;
+	Loaded   : real;
+	Target   : real;
+	Drafts   : integer;
+	DraftAmt : real;
+end database;
+
+Trans_Tran        : constant integer := 1;
+Trans_Job         : constant integer := 2;
+Trans_DProcess    : constant integer := 3;
+Trans_CarNum      : constant integer := 4;
+Trans_Loaded      : constant integer := 5;
+Trans_Target      : constant integer := 6;
+Trans_Drafts      : constant integer := 7;
+Trans_DraftAmt    : constant integer := 8;
+
+
+

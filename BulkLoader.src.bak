@@ -1,0 +1,2041 @@
+program  BulkLoader;
+
+#include import.iri  
+
+  ----------------------------------------------------------------------------
+  -- Begin constants and aliases definitions here.
+  
+  g_csProgName : constant string := " BulkLoader";  
+  g_csVersion : constant string := "2.01";
+ 
+  -- End of constants and aliases.
+  ----------------------------------------------------------------------------
+  
+  
+  ----------------------------------------------------------------------------
+  -- Begin user created types (enumerations, records, arrays) definitions.
+  type BatchStatusType is (Idle,ReadyToBatch,Paused,Batching,Done);
+  
+  type integerarray is array[50] of integer;
+  type stringarray is array[20] of string;
+  type stringarray1 is array[50] of string;
+  type realarray is array[20] of real;    
+  type realarray1 is array[50] of real;
+  
+  -- End of user created types (enumerations, records, arrays).
+  ----------------------------------------------------------------------------
+
+
+
+  ----------------------------------------------------------------------------
+  -- Start global variables definitions here.  Don't forget to initialize 
+  -- them in the system startup event handler.
+  
+  g_Startup : integer;
+  g_BatchStatus : BatchStatusType :=Idle;
+  g_BatchTarget : stored real ;  
+  g_iBuild       : integer;
+  g_srcResult    : SysCode;  
+  g_DraftsSoFar : integer ;
+  g_BatchedSoFar : real :=0;
+  g_FinalDraft  : real :=0;
+  
+  -- Config Values
+  g_DefaultDraft    : real :=0;
+  g_Header1 : string;
+  g_Header2 : string;
+  g_DraftMin    :   real :=0;
+  g_DraftMax    :   real :=0;
+  g_SettleTime  :   integer;
+  g_EmptyScale  :   real :=0;
+  g_PreAct      :   real :=0;
+  
+  -- Jobs List
+  g_JobNumber   :   integerarray;
+  g_CarNumber   :   stringarray1;
+  g_Commodity   :   stringarray1;
+  g_Target  :   realarray1;
+  g_Draft   :   realarray1;
+  
+  -- Commodity List
+  g_NumberofCommodities :   integer;
+  g_CommodityName   : stringarray;
+  g_CommodityPreAct : realarray;
+  
+  -- Transaction Values
+  g_CurrentTransaction  : integer;
+  g_CurrentJob  : integer;
+  g_TranCarNumber   : string;
+  g_DraftTarget : real;
+  g_PreActTarget    :   real;
+  g_TranCommodity   :   string;
+    
+  -- Current Scale Values
+  g_NumberofJobs    :integer; 
+  g_iScreenPosition :integer;
+  g_iUserSelection  :integer;
+  g_Gross : real :=0;
+  g_Tare : real :=0; 
+  g_ScaleCheck  : integer;
+  
+  
+  
+
+  -- End of global variables.  
+  ----------------------------------------------------------------------------
+
+
+  ----------------------------------------------------------------------------
+  -- Start functions and procedures definitions here.
+  
+  ----------------------------------------------------------------------------
+  --  Function Name     : MakeVersionString
+  --  Created by        : Company Name or Programmer Name
+  --  Last modified on  : Jan 10, 2002 
+  --  Purpose           : This function will format the version and build into
+  --                      a string and return the string.
+  --  Value Parameters  : none
+  --  Variable Params   : none
+  --  Return Parameter  : a string representation of the version and build in
+  --                      the format xx.xx.xx
+  --  Side Effects      : none
+  ---------------------------------------------------------------------------- 
+  function MakeVersionString : string; 
+    
+    sTemp : string;
+    
+  begin 
+    
+    if g_iBuild > 9 then
+      sTemp := ("Ver " + g_csVersion + "." + IntegerToString(g_iBuild, 2));
+    else
+      sTemp := ("Ver " + g_csVersion + ".0" + IntegerToString(g_iBuild, 1));
+    end if;
+      
+    return sTemp;
+    
+  end;  
+     
+  ---------------------------------------------------------------------------- 
+  --  Procedure Name    : DisplayVersion 
+  --  Created by        : Company Name or Programmer Name
+  --  Last modified on  : Jan 15, 2002  
+  --  Purpose           : This procedure will diplay the program name and
+  --                      version number to the diplay. 
+  --  Value Parameters  : none
+  --  Variable Params   : none
+  --  Side Effects      : The program name and version is put on the display.
+  ---------------------------------------------------------------------------- 
+  procedure DisplayVersion; 
+  
+  begin
+   
+    DisplayStatus(g_csProgName + " - 021915");
+  
+  end;
+
+
+procedure Load_Commodities;
+--Declaration Section
+ComodityDb : ComodityDatabase;
+DisplayText : string;
+
+begin
+    
+    g_NumberofCommodities:=0;
+    if ComodityDb.GetFirst<>SysOk then
+        
+        ComodityDb.Name:="Misc.";
+        ComodityDb.PreAct:=100;
+        ComodityDb.Clear;
+        if ComodityDb.Add<>SysOk then
+            DisplayText:="Error Writing to DataBase call (208)344-8644";
+            DisplayStatus("Press Enter to Confirm");
+            PromptUser("This Error:");
+        else
+            DisplayText:="Creating Commodity DB";
+        end if;
+        if g_Startup = 1 then
+            SetLabelText(lbl5s9,DisplayText);
+        else
+            SetLabelText(lbl15s1,DisplayText);
+        end if;            
+    
+    else
+        
+        ComodityDb.Sort(1);
+        ComodityDb.GetFirst;
+        while g_NumberofCommodities < 21
+        loop
+        
+            g_NumberofCommodities := g_NumberofCommodities+1;
+            g_CommodityName[g_NumberofCommodities] := ComodityDb.Name;
+            g_CommodityPreAct[g_NumberofCommodities] := ComodityDb.PreAct;
+            if g_Startup=1 then
+                SetLabelText(lbl5s9,"Loading Commodities "+IntegerToString(g_NumberofCommodities,2));
+            else
+                SetLabelText(lbl15s1,"Loading Commodities "+IntegerToString(g_NumberofCommodities,2));
+            end if;
+            if ComodityDb.GetNext<>SysOk then
+            
+                exit;
+                
+            end if;
+            
+        end loop;
+        
+    end if;
+    StartTimer(12);    
+    return;
+
+end;
+
+procedure Save_Config;
+--Declaration Section
+DbConfig    : ConfigDatabase;
+DisplayText : string;
+ErrorCode   : integer;
+
+begin
+    
+    if DbConfig.GetFirst<>SysOk then
+        
+        DisplayText:="Error Accessing Config DB call (208)344-8644";
+        Errorcode:=1;
+    
+    else
+    
+        DbConfig.Draft:=g_DefaultDraft;
+        DbConfig.Header1:=g_Header1;
+        DbConfig.Header2:=g_Header2;
+        DbConfig.DrMin:=g_DraftMin;
+        DbConfig.DrMax:=g_DraftMax;
+        DbConfig.Settle:=g_SettleTime;
+        DbConfig.Empty:=g_EmptyScale;
+        
+        SetSPValue(11,g_SettleTime);
+        SetSPValue(13,g_SettleTime);
+        SetSPValue(15,g_EmptyScale);
+        SetSPValue(16,g_SettleTime);
+        
+        if DbConfig.Update <> SysOk then
+        
+            DisplayText:="Error Updating Config call (208)344-8644";
+            Errorcode:=1;
+            
+        else
+        
+            DisplayText:="Saving Config Values";
+        
+        end if;
+        
+    end if;
+    
+    SetLabelText(lbl9s3,DisplayText);
+    g_ScaleCheck:=9;
+    if ErrorCode = 1 then
+        DisplayStatus("Press Enter To Confirm");
+        PromptUser("This Error:");
+        
+    end if;
+    StartTimer(12);               
+    return;
+    
+end;
+
+
+procedure DeleteJob;
+--Declaration Section
+JobsDb  :   JobsDatabase;
+
+begin
+
+    JobsDb.CarNum:=g_CarNumber[g_iUserSelection];
+    
+    if JobsDb.FindFirst(2) = SysOk then
+    
+        JobsDb.Delete;
+    
+    end if;
+    
+    return;
+    
+end;
+
+
+
+procedure Load_Config;
+--Declaration Section
+DbConfig    : ConfigDatabase;
+DisplayText : string;
+ErrorCode   : integer;
+
+begin
+    
+    if DbConfig.GetFirst<>SysOk then
+    
+        DbConfig.Draft:=5015;
+        DbConfig.Header1:="Company Name";
+        DbConfig.Header2:="Company Address";
+        DbConfig.DrMin:=100;
+        DbConfig.DrMax:=6000;
+        DbConfig.Settle:=60; 
+        DbConfig.Empty:=50;
+        DbConfig.PreAct:=250;
+        DbConfig.Clear;
+        if DbConfig.Add<>SysOk then
+        
+            DisplayText:="Error Creating Config DB call (208)344-8644";
+            Errorcode:=1;
+            
+        else
+        
+            DisplayText:="Creating Config DB with preset values";
+                
+        end if;
+    
+    else
+    
+        DisplayText:="Loading Config DB values";
+            
+    end if;
+    g_DefaultDraft := DbConfig.Draft;
+    g_Header1 := DbConfig.Header1;
+    g_Header2 := DbConfig.Header2;
+    g_DraftMin := DbConfig.DrMin;
+    g_DraftMax := DbConfig.DrMax;
+    g_SettleTime := DbConfig.Settle;
+    g_EmptyScale := DbConfig.Empty;
+    g_PreAct := DbConfig.PreAct;
+    
+    -- Update Settle Time and Empty Scale Values into Set Points.
+    SetSPValue(11,g_SettleTime);
+    SetSPValue(13,g_SettleTime);
+    SetSPValue(15,g_EmptyScale);
+    SetSPValue(16,g_SettleTime);
+    if g_Startup = 0 then
+        SetLabelText(lbl5s9,DisplayText);
+    else
+        SetLabelText(lbl15s1,DisplayText);
+    end if;
+    
+    if ErrorCode = 1 then
+        DisplayStatus("Press Enter To Confirm");
+        PromptUser("This Error:");
+    else        
+        StartTimer(12);        
+    end if;
+    
+    return;
+
+end;
+
+
+procedure MainScreen;
+--Declaration Section
+DraftWt:real;                                                    
+EstDrafts: integer;                          
+Net : real;
+begin                
+   
+    EnableHandler(Numerickeypressed);
+    SelectScreen(1);
+    if g_BatchStatus=Idle then
+       SetSoftkeyText(1,"Start Batch");
+       SetSoftkeyText(2,"");
+                                 
+    elsif g_BatchStatus=Batching then
+       SetSoftkeyText(1,"Finish Batch");
+       SetSoftkeyText(2,"");
+
+    elsif g_BatchStatus=Paused then
+       SetSoftkeyText(1,"Resume Batch");
+       SetSoftkeyText(2,"");
+    end if;         
+    SetSoftkeyText(3,"Jobs Menu");
+    SetSoftkeyText(4,"Quick Fill");
+    SetSoftkeyText(5,"Setup");
+    Net:=G_Gross-G_Tare;
+    
+    if g_BatchTarget > 0 and g_DraftTarget > 0 then
+        EstDrafts:=g_BatchTarget/g_DraftTarget+1;
+    else
+        EstDrafts:=0;
+    end if;                              
+    SetLabelText(lbl1S1,RealToString(g_BatchTarget,4,0));
+    SetLabelText(lbl4S1,IntegerToString(EstDrafts,0));     
+    SetLabelText(lbl5S1,IntegerToString(g_DraftsSoFar,0));     
+    SetLabelText(lbl10S1,RealToString(g_BatchedSoFar,6,0));
+    SetLabelText(lbl20s1,IntegerToString(g_CurrentJob,0));
+    SetLabelText(lbl22s1,g_TranCarNumber);
+    SetLabelText(lbl6s1,"Commodity"); -- Change this to actual Commodity when code is created.
+    
+    return;
+
+end;
+
+    
+procedure Start_Batching;
+--Declaration Section
+StatusDb    : StatusDatabase;
+
+begin        
+    
+    -- Check for database.  If empty clear and add a record.
+    if StatusDb.GetFirst<>SysOk then
+        
+        StatusDb.Trans:=0;
+        StatusDb.LastFill:=SystemTime;
+        StatusDb.Job:=0;
+        StatusDb.Clear;
+        StatusDb.Add;
+        SetLabelText(Lbl15S1,"Creating Database...");
+        StartTimer(12);
+        
+    end if;
+    -- If the current date doesn't match the date of the last ticket
+    -- then reset the job number to 0
+    if Date$(StatusDb.LastFill)<>Date$(SystemTime) then
+        StatusDb.Job:=0;
+        StatusDb.Update;
+    end if;
+    StatusDb.Job:=StatusDb.Job+1;
+    StatusDb.Trans:=StatusDb.Trans+1;
+    
+    g_CurrentJob:=StatusDb.Job;
+    g_CurrentTransaction:=StatusDb.Trans;
+    StatusDb.Update;
+    g_FinalDraft:=0; 
+    g_ScaleCheck:=0;    
+    g_BatchStatus:=Batching;
+    g_BatchedSoFar:=0;              
+    g_DraftsSoFar:=0;
+    g_Gross :=0;
+    g_Tare:=0;
+    StartTimer(7);
+    -- Print AuxFmt1 Ticket
+    SetPrintText(1,IntegerToString(g_CurrentTransaction,0));
+    SetPrintText(7,IntegerToString(g_CurrentJob,0));
+    SetPrintText(2,g_TranCarNumber);
+    SetPrintText(3,RealToString(g_BatchTarget,6,0));
+    Print(AuxFmt1);
+    
+    SetBatchingMode(Auto);
+    SetTimerMode(10,TimerOneShot);
+    SetTimer(10,100);
+    StartTimer(10);    
+    SetDigout(2,3,0);
+    MainScreen; 
+    SetLabelText(Lbl15S1,"Closing Dump Gate");
+    return;
+
+end;
+
+procedure CheckForZero;
+--Declaration Section
+CurWt   :   real;
+
+begin
+    
+    g_Startup:=5;
+    GetGross(1,Primary,CurWt);
+    if CurWt <= g_EmptyScale then
+    
+        Start_Batching;
+        
+    else
+        
+        SetLabelText(lbl15s1,"Scale will not settle.  Proceed Anyway?");
+        SetSoftkeyText(1,"Yes");
+        SetSoftkeyText(2,"No");
+    
+    end if;    
+    return;
+    
+end;
+
+
+procedure Check_Motion;
+--Declaration Section
+
+motion  : integer;
+
+begin
+    
+    SetSoftkeyText(1,"");
+    SetSoftkeyText(2,"");
+    SetSoftkeyText(3,"");
+    SetSoftkeyText(4,"");
+    SetSoftkeyText(5,"");
+    g_ScaleCheck:=0;
+    g_Startup:=4;
+    StartTimer(13);
+    SetLabelText(lbl15s1,"Waiting for scale to settle");
+    while motion <> 0 and g_ScaleCheck < 3
+    loop
+    
+        InMotion(1,motion);
+        if g_ScaleCheck = 1 then
+            SetLabelText(lbl15s1,"Scale is in motion.  Rechecking.");
+            g_ScaleCheck:=2;
+            StartTimer(13);
+        end if;    
+    
+    end loop;
+    StopTimer(13);    
+    if g_ScaleCheck = 3 then
+        SetLabelText(lbl15s1,"Scale will not settle.  Proceed Anyway?");
+        SetSoftkeyText(1,"Yes");
+        SetSoftkeyText(2,"No");
+    else
+        g_ScaleCheck:=0;
+        CheckForZero;
+    end if;        
+    return;
+    
+end;
+
+
+procedure PrintDraft;
+--Declaration Section
+Net : real ;
+
+begin
+    
+    Net:=g_Gross-g_Tare;
+    
+    --WriteLn(2,IntegerToString(g_DraftsSoFar,4),"    DRAFT NET "+IntegerToString(Net,5)+ "LB");
+    SetPrintText(4,RealToString(Net,4,0));
+    SetPrintText(5,RealToString(g_BatchedSoFar,6,0));
+    Print(AuxFmt2);
+    return;
+
+end;
+
+
+procedure Batch_Is_Done;
+--Declaration Section
+
+begin
+    
+    g_BatchStatus:=Idle;
+    g_CurrentJob:=0;
+    SetPrintText(6,RealToString(g_BatchedSoFar,6,0));
+    Print(AuxFmt3);         
+    --WriteLn(2, "END DATE "+Date$(SystemTime)+" "+Time$(SystemTime));
+    --WriteLn(2,"TOTAL NET WEIGHT "+RealToString(g_BatchedSoFar,0));
+    SetLabelText(Lbl15S1,"Batch Done"); 
+    StopTimer(7);
+    g_Startup:=2;             
+    MainScreen;       
+    return;
+
+end;
+   
+procedure StopAuger;
+--Declaration Section
+
+begin
+    
+    SetDigout(2,1,0);    
+    DisplayStatus("Stopping Auger");
+    SetTimerMode(1,TimerOneShot);
+    SetTimer(1,50);
+    StartTimer(1);
+    return;
+
+end;
+
+procedure StartAuger;
+--Declaration Section
+
+begin
+
+    SetDigout(2,1,1);
+    DisplayStatus("Starting Auger");
+    SetTimer(1,50);
+    StartTimer(1);
+    return;
+    
+end;
+
+   
+   
+procedure FinishBatch;
+--Declaration Section
+g_Fill:integer;
+g_Dump : integer;
+
+begin  
+       
+    StopBatch;
+    ResetBatch;            
+    SetBatchingMode(Off); 
+    StopAuger;
+    g_BatchStatus:=Idle; 
+    
+    SetBargraphLevel(Bar1S1,1);
+    SetBargraphLevel(Bar2s1,1);
+    
+    if g_Startup = 11 then
+    
+        DeleteJob;
+        
+    end if;
+    
+    SetDigout(2,2,0);
+    SetDigout(2,3,0);      
+    
+    SetTimer(2,300);
+    SetTimerMode(2,TimerOneShot);
+    StartTimer(2);
+    SetLabelText(Lbl15S1,"Finishing Batch");
+    
+    if g_Startup = 7 then
+    
+        Load_Config;
+        
+    end if;
+    return;
+
+end;
+
+
+
+procedure RunBatch;
+--Declaration Section
+DraftWt : real;
+WhatsLeft : real;
+StopAugerTarget : real;
+MinDraft : real;
+Preact : real;                
+CurWt   : real;
+
+begin            
+    
+    GetGross(1,Primary,CurWt);
+    g_Tare:=CurWt;
+    if g_BatchStatus=Batching then
+        
+        StartAuger;
+        ResetBatch;
+        --GetSPValue(1,DraftWt);
+        --GetSPValue(5,Preact);
+        --GetSPValue(2,StopAugerTarget);
+        --GetSPValue(3,MinDraft);
+        
+        --DraftWt:=DraftWt-Preact;
+        
+        --if WhatsLeft<=StopAugerTarget then
+        --   StopAuger;
+        --end if;
+        
+        --if WhatsLeft<DraftWt then 
+        --  DraftWt:= WhatsLeft;
+        --end if;
+        if g_FinalDraft > 0 then
+        
+            g_FinalDraft:=g_FinalDraft+1;
+         
+        else
+
+            DraftWt:=g_DraftTarget;
+        
+        end if;
+        
+        Preact:=g_PreActTarget;
+        WhatsLeft:=g_BatchTarget-g_BatchedSoFar;
+        
+        if g_FinalDraft = 0 and WhatsLeft < g_DraftTarget*2 then
+            DraftWt:=WhatsLeft/2;
+            g_FinalDraft:=1;
+        elsif g_FinalDraft = 2 then
+            DraftWt:=WhatsLeft;
+        end if;
+        -- Set the Setpoint for Draft Target
+        SetLabelText(lbl16s1,RealToString(DraftWt,4,0));
+        
+        SetSPValue(12,DraftWt-g_Preact+g_Tare);               
+        GetSPValue(12,DraftWt);
+        SetLabelText(CutOff,RealToString(DraftWt,4,0));     
+        SetLabelText(lbl14s1,"");
+        SetLabelText(Lbl15S1,"Opening Fill Gate");
+        
+        StartBatch;
+        
+        if g_FinalDraft = 3 then 
+            FinishBatch;     
+        end if;
+        
+        MainScreen;
+    
+    end if;
+    return;
+
+end;
+
+
+
+procedure SwitchBit(Bit : integer);
+--Declaration Section
+State : integer;
+
+begin
+    
+    GetDigout(2,Bit,State);
+    if State=1 then
+      State:=0;
+    else 
+      State:=1;
+    end if;    
+    SetDigout(2,Bit,State);
+    DisplayStatus("Output "+IntegerToString(Bit,0)+"="+IntegerToString(State,0));
+    
+    return;
+
+end;
+
+procedure Load_Jobs;
+--Declaration Section
+JobsDb  :   JobsDatabase;
+StatusDb    :   StatusDatabase;
+jobcount    :   integer;
+iCounter    :   integer;
+
+begin
+    
+    g_NumberofJobs:=0;
+    
+    -- Clear Arrays
+    for iCounter:=1 to 50
+    loop
+    
+        g_JobNumber[iCounter]:=0;
+        g_CarNumber[iCounter]:="";
+     --    g_Commodity[iCounter]:=""
+        g_Target[iCounter]:=0;
+        g_Draft[iCounter]:=0;
+        
+    end loop;   
+    
+    -- Load Jobs
+    if JobsDb.GetFirst=SysOk then
+        
+        jobcount:=1;
+        loop
+ 
+            g_JobNumber[jobcount]:=JobsDb.Job;
+            g_CarNumber[jobcount]:=JobsDb.CarNum;
+        --    g_Commodity[jobcount]:=JobsDb.Comodity
+            g_Target[jobcount]:=JobsDb.Target;
+            g_Draft[jobcount]:=JobsDb.Draft;
+            
+            if JobsDb.GetNext <> SysOk then
+            
+                exit;
+                
+            else
+            
+                jobcount:=jobcount+1;
+                
+            end if;   
+        end loop;
+        g_NumberofJobs:=jobcount;
+    end if;    
+    return;
+
+end;
+
+procedure Display_Setup;
+--Declaration Section
+iCounter    :   integer;
+
+begin
+    
+    for iCounter:=76 to 82
+    loop
+    
+        SetWidgetVisibility(iCounter,VOn);
+    
+    end loop;
+    SelectScreen(3);
+    SetLabelText(lbl1s3,"Config Menu");
+    SetLabelText(lbl2s3,"Default Draft:");
+    SetLabelText(lbl10s3,RealToString(g_DefaultDraft,4,0));
+    SetLabelText(lbl3s3,"Default CutOff:");
+    SetLabelText(lbl11s3,realtostring(g_PreAct,4,0));
+    SetLabelText(lbl4s3,"");
+    SetLabelText(lbl12s3,"");
+    SetLabelText(lbl5s3,"Min Draft:"); 
+    SetLabelText(lbl13s3,RealToString(g_DraftMin,4,0));
+    SetLabelText(lbl6s3,"Max Draft:");
+    SetLabelText(lbl14s3,RealToString(g_DraftMax,4,0));
+    SetLabelText(lbl7s3,"Settling Val");
+    SetLabelText(lbl15s3,IntegerToString(g_SettleTime,0));
+    SetLabelText(lbl8s3,"Empty Level:");
+    SetLabelText(lbl16s3,RealToString(g_EmptyScale,4,0));
+    
+    SetLabelText(lbl9s3,"Press the Number of the Entry to Change");
+    SetSoftkeyText(1,"");
+    SetSoftkeyText(2,"Save & Exit");
+    SetSoftkeyText(3,"");
+    SetSoftkeyText(4,"");
+    SetSoftkeyText(5,"");
+    
+    return;
+    
+end;
+
+
+procedure DisplayJobs;
+--Declaration Section
+iCounter    : integer;
+CurrentPosition :   integer;
+
+begin
+    
+    -- g_Startup 11  User starting batch and needs to select a job
+    -- g_Startup 12  User entering job menu and wants to add / edit jobs
+    
+    Load_Jobs;
+    SelectScreen(2);
+    SetLabelText(lbl1s2,"Jobs Menu "+IntegerToString(g_NumberofJobs,2));
+    SetLabelText(lbl9s2,"Car ID");
+    SetLabelText(lbl15s2,"Target");
+    SetLabelText(lbl21s2,"Draft");
+    if g_iScreenPosition < 1 then
+        g_iScreenPosition:=1;
+    end if;
+    
+    if g_iUserSelection < 1 then
+        g_iUserSelection:=1;
+    end if;
+    
+    if g_NumberofJobs > 0 then
+    
+        for iCounter:=0 to 4  -- References where on screen to display row data
+        loop
+            
+            CurrentPosition:=iCounter+g_iScreenPosition;   -- References which row data to display
+            --WriteLn(2,"Screen Pos= "+IntegerToString(g_iScreenPosition,2));
+            --WriteLn(2,"Counter   = "+IntegerToString(iCounter,2));
+            --WriteLn(2,"User Sel  = "+IntegerToString(g_iUserSelection,2));
+            --WriteLn(2,"Current P = "+IntegerToString(CurrentPosition,2));
+            
+            if CurrentPosition < g_NumberofJobs+1 then
+                
+                SetLabelText(26+iCounter,g_CarNumber[CurrentPosition]);
+                --    g_Commodity[CurrentPosition]:=""
+                SetLabelText(32+iCounter,RealToString(g_Target[CurrentPosition],6,0));
+                SetLabelText(38+iCounter,RealToString(g_Draft[CurrentPosition],4,0));
+                
+                if CurrentPosition = g_iUserSelection then
+                
+                    SetWidgetVisibility(19+iCounter,VOn);
+                    SetWidgetVisibility(43+iCounter,VOn);
+                    
+                else
+                
+                    SetWidgetVisibility(19+iCounter,VOff);
+                    SetWidgetVisibility(43+iCounter,VOff);
+                    
+                end if;    
+            
+            else
+            
+                SetLabelText(26+iCounter,"");
+                --    g_Commodity[CurrentPosition]:=""
+                SetLabelText(32+iCounter,"");
+                SetLabelText(38+iCounter,"");
+                SetWidgetVisibility(19+iCounter,VOff);
+                SetWidgetVisibility(43+iCounter,VOff);
+                
+            end if;
+        
+        end loop;
+        if g_Startup = 12 then
+            SetSoftkeyText(2,"Edit Job");
+            SetSoftkeyText(3,"Delete Job");
+        else
+            SetSoftkeyText(2,"");
+            SetSoftkeyText(3,"");
+        end if;
+    else
+        
+        for iCounter:=1 to 5
+        loop
+            SetLabelText(25+iCounter,"");
+            --    g_Commodity[CurrentPosition]:=""
+            SetLabelText(31+iCounter,"");
+            SetLabelText(37+iCounter,"");
+            SetWidgetVisibility(18+iCounter,VOff);
+            SetWidgetVisibility(42+iCounter,VOff);
+        end loop;
+        SetLabelText(27,"No Jobs in");
+        SetLabelText(33,"Database");
+        SetSoftkeyText(2,"");
+        SetSoftkeyText(3,"");
+    
+    end if;
+       
+    if g_Startup = 12 then
+        SetSoftkeyText(1,"Add Job");
+    else
+        SetSoftkeyText(1,"");
+    end if;
+    SetSoftkeyText(4,"");
+    SetSoftkeyText(5,"Main Menu");    
+   
+    return;
+
+end;
+
+    
+      
+procedure Save_Job;
+--Declaration Section
+JobsDb  :   JobsDatabase;
+
+begin
+    
+    if g_ScaleCheck < 10 then
+        JobsDb.CarNum:=g_TranCarNumber;
+        --JobsDb.Comodity:=g_Commodity;
+        JobsDb.Target:=g_BatchTarget;
+        JobsDb.Draft:=g_DraftTarget;
+        JobsDb.Add;
+    else
+        JobsDb.Carnum:=g_CarNumber[g_iUserSelection];
+        JobsDb.FindFirst(2);
+        if g_TranCarNumber <> "" then
+            JobsDb.CarNum:=g_TranCarNumber;
+        end if;
+        --JobsDb.Comodity:=g_Commodity;
+        if g_BatchTarget > 0 then
+            JobsDb.Target:=g_BatchTarget;
+        end if;
+        if g_DraftTarget > 0 then
+            JobsDb.Draft:=g_DraftTarget;
+        end if;
+        JobsDb.Update;
+    end if;    
+    
+    g_ScaleCheck:=0;    
+    DisplayJobs;
+    
+    return;
+    
+end;
+
+
+procedure JobScreen;
+--Declaration Section
+
+begin
+
+    SetLabelText(lbl1s3,"Job Screen");
+    SetLabelText(lbl2s3,"Job #");
+    SetLabelText(lbl3s3,"Car #");
+    -- Commodity will go here
+    SetLabelText(lbl4s3,"Target"); 
+    SetLabelText(lbl5s3,"Draft");
+    SetLabelText(lbl6s3,"");
+    SetLabelText(lbl7s3,"");
+    SetLabelText(lbl8s3,"");
+    
+    SetLabelText(lbl10s3,"");
+    SetLabelText(lbl11s3,"");
+    SetLabelText(lbl12s3,"");
+    SetLabelText(lbl13s3,"");
+    SetLabelText(lbl14s3,"");
+    SetLabelText(lbl15s3,"");
+    SetLabelText(lbl16s3,"");
+    
+    SetWidgetVisibility(76,VOn);
+    SetWidgetVisibility(77,VOn);
+    SetWidgetVisibility(78,VOn);
+    SetWidgetVisibility(79,VOn);
+    SetWidgetVisibility(80,VOff);
+    SetWidgetVisibility(81,VOff);
+    SetWidgetVisibility(82,VOff);
+    
+    SetLabelText(lbl9s3,"Press the Number of the Entry to Change");
+    
+    SetSoftkeyText(1,"");
+    SetSoftkeyText(2,"");
+    SetSoftkeyText(3,"");
+    SetSoftkeyText(4,"");
+    SetSoftkeyText(5,"Save / Exit");
+    SelectScreen(3);
+    
+    return;
+    
+end;
+
+
+procedure EditaJob;
+--Declaration Section
+
+begin
+
+    SetLabelText(lbl11s3,g_CarNumber[g_iUserSelection]);
+    SetLabelText(lbl12s3,RealToString(g_Target[g_iUserSelection],6,0));
+    SetLabelText(lbl13s3,RealToString(g_Draft[g_iUserSelection],4,0));
+    g_TranCarNumber:="";
+    g_BatchTarget:=0;
+    g_DraftTarget:=0;
+    return;
+    
+end;
+
+    
+
+procedure ConfigEntryCheck(UserString:  string);  -- Check Configuration Changes entered by user
+-- Declaration Section
+rCheck  :   real;
+iCheck  :   integer;
+ErrorCheck  :   integer;
+
+begin
+
+    if UserString = "" then
+        
+        g_ScaleCheck:=0;
+        
+    elsif g_ScaleCheck = 1 then
+        
+        rCheck:=StringToReal(UserString);
+        if rCheck>0 then
+            g_DefaultDraft:=rCheck;
+            SetLabelText(lbl10s3,RealToString(g_DefaultDraft,4,0));
+        else
+            ErrorCheck:=1;
+        end if;
+        
+    elsif g_ScaleCheck = 2 then
+    
+        g_PreAct:=StringToReal(UserString);
+        SetLabelText(lbl11s3,UserString);
+    
+        
+    elsif g_ScaleCheck = 4 then
+        
+        rCheck:=StringToReal(UserString); 
+        if rCheck > 0 then
+            g_DraftMin:=rCheck;
+            SetLabelText(lbl13s3,RealToString(g_DraftMin,4,0));
+        else
+            ErrorCheck:=1;
+        end if;
+        
+    elsif g_ScaleCheck = 5 then
+        
+        rCheck:=StringToReal(UserString); 
+        if rCheck > 0 then
+            g_DraftMax:=rCheck;
+            SetLabelText(lbl14s3,RealToString(g_DraftMax,4,0));
+        else
+            ErrorCheck:=1;
+        end if;
+        
+    elsif g_ScaleCheck = 6 then
+    
+        iCheck:=StringToInteger(UserString);
+        if iCheck>0 then
+            g_Settletime:=iCheck;
+            SetLabelText(lbl15s3,IntegerToString(g_Settletime,3));
+        else
+            ErrorCheck:=1;
+        end if;
+     
+     elsif g_ScaleCheck = 7 then
+     
+        rCheck:=StringToReal(UserString);
+        if rCheck > 0 then
+            g_EmptyScale:=rCheck;
+            SetLabelText(lbl16s3,RealToString(g_EmptyScale,4,0));
+        else
+            ErrorCheck:=1;
+        end if;
+       
+    end if;
+    g_ScaleCheck:=0;
+    if ErrorCheck = 1 then
+        SetLabelText(lbl9s3,"Invalid Entry.");
+        StartTimer(12);
+    end if;    
+
+    return;
+    
+end;
+
+
+
+  -- End of functions and procedures.
+  ----------------------------------------------------------------------------
+
+
+  ----------------------------------------------------------------------------
+  -- Begin event handler definitions here.
+     
+handler Numerickeypressed;
+--Declaration Section
+
+begin
+
+    return;
+
+end;
+
+handler Digins0B1Activate; -- Batch Start Pressed
+
+digoutput   :   integer;
+
+begin
+    
+    GetDigin(2,1,digoutput);
+    if digoutput = 0 and g_Startup = 11 then
+        StartAuger;
+    end if;
+    return;
+    
+end;
+
+
+handler Digins0B2Deactivate;    -- Estop Pressed
+--Declaration Section
+
+begin
+    
+    StopAuger;
+    return;
+
+end;
+
+
+handler Sp10Trip;
+--Declaration Section
+
+begin
+    
+    
+    return;
+
+end;
+
+
+handler Sp11Trip;
+--Declaration Section
+
+begin
+    
+    GetGross(1,Primary,g_Tare);
+    --WriteLn(2,"Tare = "+RealToString(g_Tare,4,0));
+    SetLabelText(Lbl15S1,"Filling Scale");
+    
+    return;
+
+end;
+
+handler Sp12Trip;
+--Declaration Section
+
+begin
+    
+    SetLabelText(Lbl15S1,"Closing Fill Gate");
+    MainScreen;
+    return;
+
+end;
+
+handler Sp13Trip;
+--Declaration Section
+begin        
+    SetLabelText(Lbl15S1,"Scale Settling");
+    return;
+
+end;
+
+handler Sp14Trip; 
+--Declaration Section
+
+begin        
+    
+    GetGross(1,Primary,g_Gross);
+    --WriteLn(2,"Gross = "+RealToString(g_Gross,4,0));
+    --WriteLn(2,"Net   = "+RealToString(g_Gross-g_Tare,4,0));
+    SetLabelText(lbl14s1,RealToString(g_Gross-g_Tare,4,0));
+    SetLabelText(Lbl15S1,"Dumping Scale"); 
+    SetDigout(2,3,1);   -- Open the Dump gate
+    MainScreen;
+
+    return;
+
+end;
+
+handler Sp15Trip;  
+--Declaration Section
+
+begin
+    
+    SetLabelText(Lbl15S1,"Finished Dumping Product");
+    return;
+
+end;
+
+
+
+handler Sp16Trip; 
+--Declaration Section
+
+begin
+    
+    SetLabelText(Lbl15S1,"Settling Scale"); 
+    
+    return;
+
+end;
+
+handler Sp17Trip;  
+--Declaration Section
+
+begin
+    
+    SetLabelText(lbl15s1,"Closing Dump Gate");
+    SetDigout(2,3,0);
+    g_BatchedSoFar:=g_BatchedSoFar+(g_Gross-g_Tare);
+    g_DraftsSoFar:=g_DraftsSoFar+1;
+    MainScreen;
+    PrintDraft;
+    RunBatch;
+    return;
+
+end;
+
+
+
+
+
+handler Timer1Trip;     -- Clear Auger Message
+--Declaration Section
+
+begin
+    
+    DisplayStatus("");
+    return;
+
+end;                     
+
+
+
+handler Timer2Trip; ----Finish Batch Gates Closed Settle Scale
+--Declaration Section
+
+begin
+
+    SetDigout(2,2,0);
+    SetDigout(2,3,0);
+    SetTimerMode(3,TimerOneShot);
+    SetTimer(3,100);
+    StartTimer(3);
+    SetLabelText(Lbl15S1,"Scale Settling");
+    return;
+
+end;                
+
+
+
+handler Timer3Trip;    --Batch Finished Read Weight
+--Declaration Section
+CurWt : real;
+MinWt : real;
+begin
+    
+    GetGross(1,Primary,CurWt);
+    --GetSPValue(14,MinWt);
+    if CurWt>g_EmptyScale then
+    
+        SetTimerMode(4,TimerOneShot);--Open Dump Gate
+        SetDigout(2,3,1);
+        SetLabelText(Lbl15S1,"Product Still in Scale - Dumping");              
+        SetTimer(4,300);                                  
+        StartTimer(4);
+      
+    else
+        Batch_Is_Done;
+    end if;
+    return;
+
+end;  
+
+
+
+handler Timer4Trip;--Finished Batch Close Dump Off
+--Declaration Section
+
+begin
+      
+      SetTimerMode(5,TimerContinuous);--Check For Weight
+      SetTimerMode(6,TimerOneShot);--Give Up Took To Long
+      SetTimer(5,100);
+      SetTimer(6,600);
+      StartTimer(5);
+      StartTimer(6);
+      
+    return;
+
+end;
+
+
+handler Timer5Trip;
+--Declaration Section
+CurWt : real;
+MinWt : real;
+begin
+    --SetDigout(2,4,0);
+    GetGross(1,Primary,CurWt);
+    --GetSPValue(14,MinWt);
+    SetLabelText(Lbl15S1,"Reading Weight");                  
+    if CurWt<=MinWt then
+        StopTimer(5);
+        StopTimer(6);
+    
+        Batch_Is_Done;
+    end if;     
+
+    return;
+
+end;
+
+handler Timer6Trip;
+--Declaration Section
+CurWt : real;
+MinWt : real;
+begin 
+    
+    StopTimer(6);
+    StopTimer(5);
+    Batch_Is_Done;
+    
+    return;
+
+end;
+
+handler Timer7Trip;   -- BarGraph Update
+-- Declaration Section
+BLevel  :   integer;
+BLevel1 :   integer;
+CurWt   :   real;
+BTotal  :   real;
+
+begin
+    
+    --Calculate Levels
+    GetGross(1,Primary,CurWt);
+    -- Protect from divide by zero
+    if CurWt<1 then
+        CurWt:=1;
+    end if;
+    BLevel:=(CurWt/g_DraftTarget)*100;
+    if BLevel > 100 then
+        BLevel:=100;
+    end if;
+    -- Protect from divide by zero
+    if g_BatchedSoFar<1 then
+        BTotal:=1;
+    else
+        BTotal:=g_BatchedSoFar;
+    end if;
+    BLevel1:=(BTotal/g_BatchTarget)*100;
+    if BLevel1 > 100 then
+        BLevel1:=100;
+    end if;
+    
+    --Update BarGraphs
+    SetBargraphLevel(Bar1S1,BLevel);
+    SetBargraphLevel(Bar2s1,BLevel1);
+    
+    return;
+    
+end;
+
+
+
+
+handler Timer10Trip;
+--Declaration Section
+
+begin
+    
+    SetDigout(2,3,0);
+    SetTimerMode(11,TimerOneShot);
+    SetTimer(11,100);
+    StartTimer(11);    
+    return;
+
+end;
+
+handler Timer11Trip;
+--Declaration Section
+
+begin
+
+    RunBatch;
+    return;
+
+end;
+
+handler Timer12Trip;
+-- Declaration Section
+
+begin
+
+-- Use a g_Scalecheck = 9 to trap exiting back to main menu
+    
+    if g_Startup = 0 then -- Indicator Startup Clear First Status Window
+        SetLabelText(lbl5s9,"");
+        DisplayStatus("");
+        
+        -- Removed Commodities because of issues that need to be worked out.
+        
+        --g_Startup:=1;
+        --Load_Commodities;
+        
+        -- So jump straight to main menu
+        g_Startup:=2;
+        MainScreen;
+    elsif g_Startup = 1 then
+        SetLabelText(lbl5s9,"");
+        DisplayStatus("");
+        g_Startup:=2;
+        MainScreen;
+    elsif g_Startup = 10 then
+        SetLabelText(lbl9s3,"");
+        DisplayStatus("");
+        if g_ScaleCheck = 9 then
+            g_Startup:=2;
+            MainScreen;
+        else
+            g_ScaleCheck:=0;
+            Display_Setup;
+        end if;
+    else
+        SetLabelText(lbl15s1,"");
+        DisplayStatus("");
+    end if;
+    return;
+    
+end;
+
+handler Timer13Trip;     -- Scale Check Timer
+-- Declaration Section
+
+begin
+
+    if g_Startup = 4 then
+    
+        if g_ScaleCheck = 0 then
+            g_ScaleCheck:=1;
+        elsif g_ScaleCheck = 2 then
+            g_ScaleCheck:=3;
+        end if;    
+    
+    end if;        
+    
+    return;
+    
+end;
+
+handler Userentry;
+--Declaration Section
+UserString : string;
+UserValue : real;
+DbStatus : SysCode;
+DisplayPrompt : string;      
+Ticket : real;
+begin     
+    
+    UserString := GetEntry;
+    ClosePrompt;  
+    EnableHandler(Numerickeypressed);
+    
+    if EventKey = EnterKey  then                             
+        
+        if g_Startup = 0 then
+        
+            SetLabelText(lbl5s9,"");
+            DisplayStatus("");
+            g_Startup:=1;
+            Load_Commodities;
+        
+        elsif g_Startup = 1 then
+            
+            SetLabelText(lbl5s9,"");
+            DisplayStatus("");
+            g_Startup:=2;
+            MainScreen;
+                
+        elsif g_Startup = 7 or g_Startup = 12 then
+            -- Exit From Quick Entry Clause
+            if UserString = "999" then
+            
+                g_Startup:=2;
+                g_ScaleCheck:=0;
+                g_TranCarNumber:="";
+                g_TranCommodity:="";
+                g_PreActTarget:=0;
+                g_BatchTarget:=0;
+                g_DraftTarget:=0;
+                            
+                MainScreen;
+            
+            elsif g_ScaleCheck = 0 or g_ScaleCheck = 11 then
+        
+                g_TranCarNumber:=UserString;
+                SetLabelText(lbl11s3,UserString);
+                -- Skip Commodity and preact for that commodity
+                -- g_ScaleCheck:=1;
+                -- DisplayStatus("Enter Commodity:");
+                if g_ScaleCheck = 0 then
+                    if g_Startup = 12 then
+                        g_ScaleCheck:=3;
+                        DisplayStatus("Enter Batch Amount:");
+                    else
+                        g_ScaleCheck:=2;
+                        DisplayStatus("Enter Early Cut Off");
+                    end if;
+                    PromptUser("=>");
+                end if;    
+            elsif g_ScaleCheck = 1 then   -- Not currently used
+            
+                g_TranCommodity:=UserString;
+                SetLabelText(lbl6s1,UserString);
+                g_ScaleCheck:=2;
+                DisplayStatus("Enter Early Cut Off");
+                PromptUser("Amount=>");
+                
+            elsif g_ScaleCheck = 2 then
+                
+                UserValue:=StringToReal(UserString);
+                if UserValue<=0 then
+                    g_PreActTarget:=g_PreAct;
+                else               
+                    g_PreActTarget:=UserValue;
+                    g_ScaleCheck:=3;
+                    DisplayStatus("Enter Batch Amount:");
+                    PromptUser("=>");
+                end if;
+                
+            elsif g_ScaleCheck = 3 or g_ScaleCheck = 12 then
+                UserValue:=StringToReal(UserString);
+                if UserValue<=0 then
+                    DisplayStatus("Must Be > 0");
+                    PromptUser("Amount=>");  
+                else               
+                    g_BatchTarget:=UserValue;
+                    SetLabelText(lbl12s3,UserString);
+                    if g_ScaleCheck = 3 then
+                        g_ScaleCheck:=4;
+                        DisplayStatus("Enter Draft Amount:");
+                        PromptUser("=>");  
+                    end if;
+                end if;
+                
+            elsif g_ScaleCheck = 4 or g_ScaleCheck = 13 then
+                UserValue:=StringToReal(UserString);
+                if UserValue<=0 then
+                    DisplayStatus("Must Be > 0");
+                    PromptUser("Amount=>");  
+                else               
+                    g_DraftTarget:=UserValue;
+                    SetLabelText(lbl13s3,UserString);
+                    if g_ScaleCheck = 4 then
+                        g_ScaleCheck:=5;
+                        if g_Startup = 7 then
+                            DisplayStatus("Press 'Enter' To Start");
+                        else
+                            DisplayStatus("Press 'Enter' to Save");
+                        end if;
+                        PromptUser("=>");
+                    end if;
+                end if;
+                
+            elsif g_ScaleCheck = 5 then
+                
+                if g_Startup = 7 then
+                    
+                    SetLabelText(lbl22s1,g_TranCarNumber);
+                    SetLabelText(lbl1s1,RealToString(g_BatchTarget,6,0));
+                    SetLabelText(lbl16s1,RealToString(g_DraftTarget,4,0));
+                    g_PreAct:=g_PreActTarget;
+                    Check_Motion;
+                    
+                else
+                    
+                    Save_Job;
+                    
+                end if;
+                    
+            end if;
+        
+        elsif g_Startup = 10 then    -- Coming from Setup Menu
+        
+            ConfigEntryCheck(UserString);
+                
+        end if;               
+    end if;
+        
+    return;
+
+end;
+
+
+     
+handler User1Keypressed;    -- Start Batching
+--Declaration Section
+
+begin               
+    
+    if g_BatchStatus=Idle then
+        
+        if g_Startup = 4 then
+            
+            if g_ScaleCheck = 3 then
+                g_ScaleCheck:=0;
+                CheckForZero;
+            end if;
+                
+        elsif g_Startup = 2 then
+            
+            if g_CurrentJob = 0 then
+                g_Startup:=11;
+                DisplayJobs;
+            else
+                Check_Motion;
+            end if;
+            --SetLabelText(lbl15s1,"Currently Disabled.");
+            
+        elsif g_Startup = 5 then
+            
+            Start_Batching;
+            
+        elsif g_Startup = 12 then
+            
+            --if g_NumberofJobs < 5 then
+                JobScreen;
+                g_ScaleCheck:=0;
+                SetLabelText(lbl9s3,"Press '999' to Abort and Start Over");
+                DisplayStatus("Enter Car ID:");
+                PromptUser("=>");
+            --end if;           
+        end if;
+    
+    else
+        
+        StopBatch;
+        ResetBatch;
+        FinishBatch;    
+            
+    end if;    
+    return;
+
+end;
+
+
+handler User2Keypressed;    -- Pause or Stop Batching
+--Declaration Section
+CheckBatch  :   BatchStatus;
+
+begin
+
+    if g_BatchStatus=Idle then
+    
+        if g_Startup = 4 then
+        
+            g_Startup:=2;
+            MainScreen;
+        
+        elsif g_Startup = 10 then
+        
+            Save_Config;
+            
+        elsif g_Startup = 12 then
+            
+            g_ScaleCheck:=11;
+            JobScreen;
+            EditaJob;
+            
+        end if;
+    
+    elsif g_BatchStatus = Batching then
+    
+        if g_Startup = 5 then
+                             
+            GetBatchStatus(CheckBatch);
+            if CheckBatch=BatchRunning then
+                PauseBatch;
+            
+                MainScreen;
+            else
+            
+                SetLabelText(lbl15s1,"Batch does not show BatchRunning");
+                StartTimer(12); 
+            
+            end if;
+        end if;
+            
+    end if;    
+          
+--    StopBatch;
+    --ResetBatch;
+--    g_BatchStatus:=Idle;
+--    MainScreen;
+    return;
+
+end;
+
+handler User3Keypressed;  -- Jobs Menu
+--Declaration Section
+
+begin
+    
+    if g_Startup = 2 then
+    
+        g_Startup:=12;
+        DisplayJobs;
+    
+    elsif g_Startup = 12 then
+    
+        DeleteJob;
+        DisplayJobs;
+            
+    end if;
+    return;
+
+end;
+
+
+handler User4Keypressed; -- Quick Fill Entry
+--Declaration Section
+
+begin
+    
+    JobScreen;
+    g_Startup:=7;
+    g_ScaleCheck:=0;
+    SetLabelText(lbl9s3,"Press '999' to Abort and Start Over");
+    DisplayStatus("Enter Car ID:");
+    PromptUser("=>");
+    return;
+
+end;
+
+handler User5keypressed;   -- Setup Menu
+--Declaration Section
+
+begin
+
+    if g_Startup = 2 then
+        g_Startup:=10;
+        g_ScaleCheck:=0;
+        Display_Setup;
+    
+    elsif g_Startup = 11 or g_Startup = 12 then     -- returning from jobs menu
+        
+        if g_ScaleCheck = 0 then
+            g_Startup:=2;
+            MainScreen;
+        else
+            Save_Job;
+            g_ScaleCheck:=0;
+            DisplayJobs;
+        end if;
+    end if;
+
+    return;
+    
+end;
+
+
+handler Navupkeypressed;
+--Declaration Section
+
+begin
+    
+    if g_Startup = 12 then
+    
+        if g_iUserSelection > g_iScreenPosition then
+            g_iUserSelection:=g_iUserSelection-1;
+        else
+            if g_iScreenPosition > 1 then    -- If not on first screen
+                g_iScreenPosition:=g_iScreenPosition - 5;  --Go Back a screen
+                if g_iScreenPosition < 1 then -- If that is too far reset to first screen
+                    g_iScreenPosition:=1;
+                end if;
+                g_iUserSelection:=g_iScreenPosition;
+            end if;
+        end if;
+        DisplayJobs;
+    end if;
+    return;
+
+end;
+
+handler Enterkeypressed;
+--Declaration Section
+
+begin
+    
+    if g_Startup = 11 then
+        
+        g_TranCarNumber:=g_CarNumber[g_iUserSelection];
+        --    g_Commodity[CurrentPosition]:=""
+        g_BatchTarget:=g_Target[g_iUserSelection];
+        g_DraftTarget:=g_Draft[g_iUserSelection];
+        SelectScreen(1);
+        SetLabelText(lbl22s1,g_TranCarNumber);
+        SetLabelText(lbl1s1,RealToString(g_BatchTarget,6,0));
+        SetLabelText(lbl16s1,RealToString(g_DraftTarget,4,0));
+        
+        Check_Motion;
+            
+    end if;
+    return;
+
+end;
+
+
+handler Navdownkeypressed;
+--Declaration Section
+
+begin
+    
+    if g_Startup = 12 then
+        if g_iUserSelection < g_iScreenPosition+4 and g_iUserSelection < g_NumberofJobs then
+            g_iUserSelection:=g_iUserSelection+1;
+        else
+            if g_iScreenPosition+5 < g_NumberofJobs+1 then    -- If not on last screen
+                g_iScreenPosition:=g_iScreenPosition + 5;  --Go Forward a screen
+                g_iUserSelection:=g_iScreenPosition;
+            end if;    
+            
+        end if;
+        DisplayJobs;
+    end if;
+    return;
+
+end;
+
+handler Navleftkeypressed;
+--Declaration Section
+
+begin
+    
+    if g_Startup = 12 then
+        if g_iScreenPosition - 5 > 0 then
+        
+            g_iScreenPosition:=g_iScreenPosition - 5;
+            g_iUserSelection:=g_iScreenPosition;
+        
+        else
+        
+            g_iScreenPosition:=1;
+            
+        end if;
+        DisplayJobs;    
+    end if;
+    return;
+
+end;
+
+handler Navrightkeypressed;
+--Declaration Section
+
+begin
+
+    if g_Startup = 12 then    
+        if g_iScreenPosition +5 < g_NumberofJobs+1 then
+        
+            g_iScreenPosition:=g_iScreenPosition+5;
+            g_iUserSelection:=g_iScreenPosition;
+        
+        end if;                                 
+        DisplayJobs;
+    end if;
+    return;
+    
+end;
+
+
+handler N1Keypressed;
+--Declaration Section
+
+begin
+    
+    if g_Startup = 10 then
+        
+        g_ScaleCheck:=1;
+        DisplayStatus("Enter Default Draft");
+        PromptUser("=>");
+    
+    end if;    
+    return;
+
+end;
+
+handler N2Keypressed;
+--Declaration Section
+
+begin
+    
+    if g_Startup = 10 then
+        
+        g_ScaleCheck:=2;
+        DisplayStatus("Enter Early CutOff");
+        PromptUser("=>");
+    
+    elsif g_Startup = 12 and g_ScaleCheck>10 then
+    
+        g_ScaleCheck:=11;
+        DisplayStatus("Enter Car ID:");
+        PromptUser("=>");
+        
+    end if;    
+    return;
+
+end;
+
+
+handler N3Keypressed;
+--Declaration Section
+
+begin
+    
+    if g_Startup = 10 then
+        
+        g_ScaleCheck:=3;
+        
+    elsif g_Startup = 12 then
+    
+        g_ScaleCheck:=12;
+        DisplayStatus("Enter Batch Amt");
+        PromptUser("=>");
+        
+    end if;    
+    return;
+
+end;
+
+
+handler N4Keypressed;
+--Declaration Section
+
+begin
+    
+    if g_Startup = 10 then
+        
+        g_ScaleCheck:=4;
+        DisplayStatus("Enter Min Draft");
+        PromptUser("=>");
+    
+    elsif g_Startup = 12 then
+    
+        g_ScaleCheck:=13;
+        DisplayStatus("Enter Draft Amt");
+        PromptUser("=>");
+        
+    end if;    
+    return;
+
+end;
+
+
+handler N5Keypressed;
+--Declaration Section
+
+begin
+    
+    if g_Startup = 10 then
+        
+        g_ScaleCheck:=5;
+        DisplayStatus("Enter Max Draft:");
+        PromptUser("=>");
+    
+    end if;    
+    return;
+
+end;
+
+handler N6Keypressed;
+--Declaration Section
+
+begin
+    
+    if g_Startup = 10 then
+        
+        g_ScaleCheck:=6;
+        DisplayStatus("Settling Time:");
+        PromptUser("=>");
+    
+    end if;    
+    return;
+
+end;
+
+handler N7Keypressed;
+--Declaration Section
+
+begin
+    
+    if g_Startup = 10 then
+        
+        g_ScaleCheck:=7;
+        DisplayStatus("Empty Scale Level:");
+        PromptUser("=>");
+    
+    end if;    
+    return;
+
+end;
+
+
+
+
+       
+-- End of event handlers.
+----------------------------------------------------------------------------
+
+   
+
+
+------------------------------------------------------------------------------
+-- This chunk of code is the system startup event handler.
+
+begin
+
+  -- Increment the build number every time you make a change and recompile.
+    g_iBuild := 1; 
+    -- Delay Timer to Update Main Screen Status
+    SetTimerMode(7,TimerContinuous);
+    SetTimer(7,30);
+    SetTimerMode(12,TimerOneShot);
+    SetTimer(12,300);
+    SetTimerMode(13,TimerOneShot);
+    SetTimer(13,300);
+
+  -- Initialize all global variables here. 
+    g_Startup:=0;
+    SetLabelText(lbl15s1,""); 
+    SetBargraphLevel(Bar1S1,1);
+    SetBargraphLevel(Bar2s1,1);
+  -- Load Database Values
+    SelectScreen(9);
+    Load_Config;
+    -- Commodity Load is handled by the tripping of timer 12.
+
+   
+
+end  BulkLoader; 
+-- This name must match the name following "program" keyword at 
+-- the beginning of the program.
+
